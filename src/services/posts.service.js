@@ -1,8 +1,18 @@
 const prisma = require("../db");
 
 async function createPost(data) {
+  const author = await prisma.user.findUnique({
+    where: { id: data.authorId },
+  });
+  if (!author) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+
   const postData = {
     imageUrl: data.imageUrl,
+    authorId: data.authorId,
   };
   if (data.caption !== undefined) postData.caption = data.caption;
   if (data.location !== undefined) postData.location = data.location;
@@ -26,12 +36,36 @@ async function listPosts({ page = 1, limit = 10, sortBy = "createdAt", order = "
     if (to) where.createdAt.lt = to;
   }
 
+  let orderBy;
+  if (sortBy === "likes") {
+    orderBy = [
+      { likes: { _count: order } },
+      { createdAt: "desc" },
+    ];
+  } else {
+    orderBy = { [sortBy]: order };
+  }
+
   const [data, total] = await prisma.$transaction([
     prisma.post.findMany({
       where,
-      orderBy: { [sortBy]: order },
+      orderBy,
       skip: (page - 1) * limit,
       take: limit,
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            fullname: true,
+          },
+        },
+        _count: {
+          select: {
+            likes: true,
+          },
+        },
+      },
     }),
     prisma.post.count({ where }),
   ]);
@@ -50,6 +84,20 @@ async function listPosts({ page = 1, limit = 10, sortBy = "createdAt", order = "
 async function getPostById(id) {
   return await prisma.post.findUnique({
     where: { id },
+    include: {
+      author: {
+        select: {
+          id: true,
+          username: true,
+          fullname: true,
+        },
+      },
+      _count: {
+        select: {
+          likes: true,
+        },
+      },
+    },
   });
 }
 

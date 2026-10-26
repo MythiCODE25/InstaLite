@@ -3,13 +3,16 @@ const { parsePagination } = require("../utils/pagination");
 
 async function create(req, res) {
   try {
-    const { imageUrl, caption, location } = req.body;
-    if (!imageUrl) {
-      return res.status(400).json({ error: "imageUrl is required" });
+    const { imageUrl, authorId, caption, location } = req.body;
+    if (!imageUrl || authorId === undefined || authorId === null) {
+      return res.status(400).json({ error: "imageUrl and authorId are required" });
     }
-    const post = await postsService.createPost({ imageUrl, caption, location });
+    const post = await postsService.createPost({ imageUrl, authorId, caption, location });
     return res.status(201).json(post);
   } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({ error: error.message });
+    }
     return res.status(500).json({ error: "Internal server error" });
   }
 }
@@ -25,9 +28,9 @@ async function list(req, res) {
 
     // 2. Sorting
     const { sortBy = "createdAt", order = "desc" } = req.query;
-    const allowedSortBy = ["createdAt", "updatedAt"];
+    const allowedSortBy = ["createdAt", "updatedAt", "likes"];
     if (!allowedSortBy.includes(sortBy)) {
-      return res.status(400).json({ error: "sortBy must be one of: createdAt, updatedAt" });
+      return res.status(400).json({ error: "sortBy must be one of: createdAt, updatedAt, likes" });
     }
     const allowedOrder = ["asc", "desc"];
     if (!allowedOrder.includes(order)) {
