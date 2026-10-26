@@ -49,6 +49,17 @@ async function list(req, res) {
       }
     }
 
+    let hasPosts;
+    if (req.query.hasPosts !== undefined) {
+      if (req.query.hasPosts === "true") {
+        hasPosts = true;
+      } else if (req.query.hasPosts === "false") {
+        hasPosts = false;
+      } else {
+        return res.status(400).json({ error: "hasPosts must be true or false" });
+      }
+    }
+
     const search = req.query.search;
 
     const result = await usersService.listUsers({
@@ -58,6 +69,7 @@ async function list(req, res) {
       order,
       isPrivate,
       search,
+      hasPosts,
     });
 
     return res.status(200).json(result);
@@ -78,6 +90,28 @@ async function getOne(req, res) {
     }
     return res.status(200).json(user);
   } catch (error) {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+async function getUserPosts(req, res) {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const pagination = parsePagination(req.query);
+    if (pagination.error) {
+      return res.status(400).json({ error: pagination.error });
+    }
+    const { page, limit } = pagination;
+
+    const result = await usersService.getUserPosts(id, { page, limit });
+    return res.status(200).json(result);
+  } catch (error) {
+    if (error.status === 404) {
+      return res.status(404).json({ error: error.message });
+    }
     return res.status(500).json({ error: "Internal server error" });
   }
 }
@@ -123,6 +157,7 @@ module.exports = {
   create,
   list,
   getOne,
+  getUserPosts,
   update,
   remove,
 };

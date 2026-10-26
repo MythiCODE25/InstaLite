@@ -11,7 +11,7 @@ async function createUser(data) {
   });
 }
 
-async function listUsers({ page = 1, limit = 10, sortBy = "createdAt", order = "desc", isPrivate, search } = {}) {
+async function listUsers({ page = 1, limit = 10, sortBy = "createdAt", order = "desc", isPrivate, search, hasPosts } = {}) {
   const where = {};
   if (isPrivate !== undefined) {
     where.isPrivate = isPrivate;
@@ -21,6 +21,13 @@ async function listUsers({ page = 1, limit = 10, sortBy = "createdAt", order = "
       { username: { contains: search, mode: "insensitive" } },
       { fullname: { contains: search, mode: "insensitive" } },
     ];
+  }
+  if (hasPosts !== undefined) {
+    if (hasPosts) {
+      where.posts = { some: {} };
+    } else {
+      where.posts = { none: {} };
+    }
   }
 
   const [data, total] = await prisma.$transaction([
@@ -47,7 +54,54 @@ async function listUsers({ page = 1, limit = 10, sortBy = "createdAt", order = "
 async function getUserById(id) {
   return await prisma.user.findUnique({
     where: { id },
+    include: {
+      _count: {
+        select: {
+          posts: true,
+          likes: true,
+        },
+      },
+    },
   });
+}
+
+async function getUserPosts(userId, { page, limit }) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+  if (!user) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+
+  const where = { authorId: userId };
+  const [data, total] = await prisma.$transaction([
+    prisma.post.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        _count: {
+          select: {
+            likes: true,
+          },
+        },
+      },
+    }),
+    prisma.post.count({ where }),
+  ]);
+
+  return {
+    data,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+    },
+  };
 }
 
 async function updateUser(id, data) {
@@ -67,6 +121,7 @@ module.exports = {
   createUser,
   listUsers,
   getUserById,
+  getUserPosts,
   updateUser,
   deleteUser,
 };
