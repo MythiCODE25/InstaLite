@@ -1,4 +1,5 @@
 const postsService = require("../services/posts.service");
+const { parsePagination } = require("../utils/pagination");
 
 async function create(req, res) {
   try {
@@ -15,8 +16,55 @@ async function create(req, res) {
 
 async function list(req, res) {
   try {
-    const posts = await postsService.listPosts();
-    return res.status(200).json(posts);
+    // 1. Pagination
+    const pagination = parsePagination(req.query);
+    if (pagination.error) {
+      return res.status(400).json({ error: pagination.error });
+    }
+    const { page, limit } = pagination;
+
+    // 2. Sorting
+    const { sortBy = "createdAt", order = "desc" } = req.query;
+    const allowedSortBy = ["createdAt", "updatedAt"];
+    if (!allowedSortBy.includes(sortBy)) {
+      return res.status(400).json({ error: "sortBy must be one of: createdAt, updatedAt" });
+    }
+    const allowedOrder = ["asc", "desc"];
+    if (!allowedOrder.includes(order)) {
+      return res.status(400).json({ error: "order must be asc or desc" });
+    }
+
+    // 3. Filtering
+    const { location, search, from, to } = req.query;
+    let fromDate;
+    let toDate;
+
+    if (from !== undefined) {
+      fromDate = new Date(from);
+      if (isNaN(fromDate.getTime())) {
+        return res.status(400).json({ error: "from and to must be valid dates" });
+      }
+    }
+
+    if (to !== undefined) {
+      toDate = new Date(to);
+      if (isNaN(toDate.getTime())) {
+        return res.status(400).json({ error: "from and to must be valid dates" });
+      }
+    }
+
+    const result = await postsService.listPosts({
+      page,
+      limit,
+      sortBy,
+      order,
+      location,
+      search,
+      from: fromDate,
+      to: toDate,
+    });
+
+    return res.status(200).json(result);
   } catch (error) {
     return res.status(500).json({ error: "Internal server error" });
   }
