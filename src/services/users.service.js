@@ -104,6 +104,59 @@ async function getUserPosts(userId, { page, limit }) {
   };
 }
 
+async function getLikedPosts(userId, { page = 1, limit = 10 } = {}) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+  if (!user) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+
+  const where = {
+    likes: {
+      some: {
+        userId,
+      },
+    },
+  };
+
+  const [data, total] = await prisma.$transaction([
+    prisma.post.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            fullname: true,
+          },
+        },
+        _count: {
+          select: {
+            likes: true,
+          },
+        },
+      },
+    }),
+    prisma.post.count({ where }),
+  ]);
+
+  return {
+    data,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+    },
+  };
+}
+
 async function updateUser(id, data) {
   return await prisma.user.update({
     where: { id },
@@ -122,6 +175,7 @@ module.exports = {
   listUsers,
   getUserById,
   getUserPosts,
+  getLikedPosts,
   updateUser,
   deleteUser,
 };
